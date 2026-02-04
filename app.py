@@ -219,6 +219,7 @@ def main():
     
     # Sidebar
     with st.sidebar:
+        st.sidebar.image(r"C:\Users\jblanquicet\OneDrive - Tebsa\Documentos\AnalisisdeMercado\ProyectaGas\Dashboard\logo.jpg", use_column_width=True)
         st.markdown("### 📁 Estado de Datos")
         datos = cargar_datos()
         
