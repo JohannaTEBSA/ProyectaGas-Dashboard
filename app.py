@@ -151,8 +151,12 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
         ))
         
         # Línea vertical separando histórico de predicción
-        if df_hist is not None:
+        if df_hist is not None and len(df_hist) > 0:
             fecha_corte = df_hist['Fecha'].max()
+            # Convertir a datetime de Python para compatibilidad con plotly
+            if hasattr(fecha_corte, 'to_pydatetime'):
+                fecha_corte = fecha_corte.to_pydatetime()
+            
             fig.add_vline(
                 x=fecha_corte,
                 line_dash="dash",
