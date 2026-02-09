@@ -30,7 +30,7 @@ st.markdown("""
 <style>
     /* ===== ESTILOS GENERALES ===== */
     .main {
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        background: linear-gradient(135deg, #f5f7fa 0%, #e3e9f0 100%);
     }
     
     /* ===== HEADER PRINCIPAL ===== */
@@ -71,7 +71,7 @@ st.markdown("""
     
     /* ===== SIDEBAR ===== */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
     }
     
     [data-testid="stSidebar"] .element-container {
@@ -81,6 +81,29 @@ st.markdown("""
     [data-testid="stSidebar"] h3 {
         color: white !important;
         font-weight: 700;
+        font-size: 1.1rem;
+    }
+    
+    [data-testid="stSidebar"] p {
+        color: rgba(255, 255, 255, 0.9);
+    }
+    
+    /* Separadores en sidebar */
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255, 255, 255, 0.2);
+        margin: 20px 0;
+    }
+    
+    /* Alertas en sidebar */
+    [data-testid="stSidebar"] .stAlert {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    [data-testid="stSidebar"] .stAlert p {
+        color: white !important;
+        font-weight: 600;
     }
     
     /* ===== TABS ===== */
@@ -332,21 +355,40 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
         if df_hist is not None and len(df_hist) > 0:
             fecha_corte = df_hist['Fecha'].max()
             
-            # Convertir a string ISO format para máxima compatibilidad con plotly
-            if hasattr(fecha_corte, 'to_pydatetime'):
-                fecha_corte_str = fecha_corte.to_pydatetime().strftime('%Y-%m-%d')
-            elif hasattr(fecha_corte, 'strftime'):
-                fecha_corte_str = fecha_corte.strftime('%Y-%m-%d')
-            else:
-                fecha_corte_str = str(fecha_corte)
-            
-            fig.add_vline(
-                x=fecha_corte_str,
-                line_dash="dash",
-                line_color="gray",
-                annotation_text="Inicio Predicción",
-                annotation_position="top"
-            )
+            # Usar add_shape en lugar de add_vline (más compatible)
+            try:
+                # Convertir a timestamp
+                if hasattr(fecha_corte, 'to_pydatetime'):
+                    fecha_ts = fecha_corte.to_pydatetime()
+                elif hasattr(fecha_corte, 'timestamp'):
+                    fecha_ts = fecha_corte
+                else:
+                    fecha_ts = pd.to_datetime(fecha_corte)
+                
+                # Agregar línea vertical con add_shape
+                fig.add_shape(
+                    type="line",
+                    x0=fecha_ts,
+                    x1=fecha_ts,
+                    y0=0,
+                    y1=1,
+                    yref="paper",
+                    line=dict(color="gray", width=2, dash="dash")
+                )
+                
+                # Agregar anotación separada
+                fig.add_annotation(
+                    x=fecha_ts,
+                    y=1,
+                    yref="paper",
+                    text="Inicio Predicción",
+                    showarrow=False,
+                    yshift=10,
+                    font=dict(size=12, color="gray")
+                )
+            except Exception as e:
+                # Si falla, continuar sin la línea
+                pass
     
     # Calcular rango apropiado del eje Y
     all_values = []
