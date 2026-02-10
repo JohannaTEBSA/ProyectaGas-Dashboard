@@ -1,5 +1,5 @@
 """
-ProyectaGAS Dashboard - TPLEnergía
+ProyectaGAS Dashboard - TPLGas
 Dashboard web para predicción de demanda y precios de gas natural
 Desplegado en Streamlit Cloud
 """
@@ -16,7 +16,7 @@ import os
 # ============================================================================
 
 st.set_page_config(
-    page_title="ProyectaGAS - TPLEnergía",
+    page_title="ProyectaGAS - TPLGas",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -325,6 +325,29 @@ def calcular_metricas(valores):
         'cv': (np.std(valores) / np.mean(valores)) * 100
     }
 
+def calcular_promedios_mensuales(df, columna):
+    """Calcula promedios mensuales de una variable"""
+    if df is None or columna not in df.columns:
+        return None
+    
+    df_copy = df.copy()
+    df_copy['Mes'] = pd.to_datetime(df_copy['Fecha']).dt.month
+    df_copy['Mes_Nombre'] = pd.to_datetime(df_copy['Fecha']).dt.month_name()
+    
+    promedios = df_copy.groupby(['Mes', 'Mes_Nombre'])[columna].agg(['mean', 'min', 'max', 'std']).reset_index()
+    promedios.columns = ['Mes', 'Mes_Nombre', 'Promedio', 'Minimo', 'Maximo', 'Std']
+    
+    return promedios
+
+def filtrar_por_mes(df, mes_numero):
+    """Filtra DataFrame por mes (1-12), None para todos"""
+    if df is None or mes_numero is None:
+        return df
+    
+    df_copy = df.copy()
+    df_copy['Mes'] = pd.to_datetime(df_copy['Fecha']).dt.month
+    return df_copy[df_copy['Mes'] == mes_numero].drop('Mes', axis=1)
+
 # ============================================================================
 # FUNCIÓN DE VISUALIZACIÓN PRINCIPAL
 # ============================================================================
@@ -468,7 +491,7 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
 def main():
     # Header
     st.markdown('<h1 class="main-header">⚡ ProyectaGAS - Dashboard Empresarial</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLEnergía</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLGas</p>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -513,24 +536,351 @@ def main():
         """)
     
     # Tabs principales
-    tab1, tab2, tab3, tab4 = st.tabs(["💵 Precios Internacionales", "📊 Demanda Total", "🏭 Sectores", "📈 Métricas del Modelo"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📅 Resumen Mensual", 
+        "💵 Precios Internacionales", 
+        "📊 Demanda Total", 
+        "🏭 Sectores", 
+        "📈 Métricas del Modelo"
+    ])
     
     # ========================================================================
-    # TAB 1: PRECIOS
+    # TAB 1: RESUMEN MENSUAL (NUEVO)
     # ========================================================================
     with tab1:
+        st.markdown("### 📅 Resumen Mensual - Todas las Variables")
+        st.markdown("Selecciona un mes para ver el promedio de todas las variables predichas")
+        
+        # Selector de mes prominente
+        col_sel1, col_sel2, col_sel3 = st.columns([1, 2, 1])
+        with col_sel2:
+            mes_resumen = st.selectbox(
+                "🗓️ Selecciona el mes:",
+                options=list(meses_dict.keys()),
+                key='mes_resumen',
+                index=0
+            )
+        
+        mes_numero_resumen = meses_dict[mes_resumen]
+        
+        if mes_numero_resumen is None:
+            st.warning("⚠️ Por favor selecciona un mes específico para ver el resumen")
+        else:
+            # Filtrar todos los datos
+            pred_precios_mes = filtrar_por_mes(datos['pred_precios'], mes_numero_resumen) if datos['pred_precios'] is not None else None
+            pred_demanda_mes = filtrar_por_mes(datos['pred_demanda'], mes_numero_resumen) if datos['pred_demanda'] is not None else None
+            
+            if pred_precios_mes is not None or pred_demanda_mes is not None:
+                dias_mes = len(pred_precios_mes) if pred_precios_mes is not None else len(pred_demanda_mes)
+                st.success(f"📊 Mostrando promedios de **{mes_resumen} 2026** (basado en {dias_mes} días)")
+                
+                st.markdown("---")
+                
+                # ============================================================
+                # SECCIÓN 1: PRECIOS INTERNACIONALES
+                # ============================================================
+                st.markdown("### 💵 Precios Internacionales")
+                
+                col_precio1, col_precio2 = st.columns(2)
+                
+                with col_precio1:
+                    if pred_precios_mes is not None:
+                        col_hh = None
+                        for c in ['HenryHub_USD_MMBtu_Predicho', 'HenryHub_USD_MMBtu', 'HenryHub']:
+                            if c in pred_precios_mes.columns:
+                                col_hh = c
+                                break
+                        
+                        if col_hh:
+                            prom_hh = pred_precios_mes[col_hh].mean()
+                            min_hh = pred_precios_mes[col_hh].min()
+                            max_hh = pred_precios_mes[col_hh].max()
+                            
+                            st.markdown(f"""
+                            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                        padding: 25px; border-radius: 15px; color: white; text-align: center;
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                                <h3 style='margin: 0; color: white; font-size: 1.2em;'>💰 Henry Hub (USA)</h3>
+                                <h1 style='margin: 15px 0; color: white; font-size: 2.5em; font-weight: bold;'>
+                                    ${prom_hh:.2f}
+                                </h1>
+                                <p style='margin: 0; color: white; font-size: 1.1em; opacity: 0.95;'>USD/MMBtu</p>
+                                <hr style='border-color: rgba(255,255,255,0.3); margin: 15px 0;'>
+                                <div style='display: flex; justify-content: space-around; margin-top: 10px;'>
+                                    <div>
+                                        <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.9em;'>Mínimo</p>
+                                        <p style='margin: 5px 0; color: white; font-size: 1.1em; font-weight: bold;'>${min_hh:.2f}</p>
+                                    </div>
+                                    <div>
+                                        <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.9em;'>Máximo</p>
+                                        <p style='margin: 5px 0; color: white; font-size: 1.1em; font-weight: bold;'>${max_hh:.2f}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                with col_precio2:
+                    if pred_precios_mes is not None:
+                        col_ttf = None
+                        for c in ['TTF_USD_MMBtu_Predicho', 'TTF_USD_MMBtu', 'TTF']:
+                            if c in pred_precios_mes.columns:
+                                col_ttf = c
+                                break
+                        
+                        if col_ttf:
+                            prom_ttf = pred_precios_mes[col_ttf].mean()
+                            min_ttf = pred_precios_mes[col_ttf].min()
+                            max_ttf = pred_precios_mes[col_ttf].max()
+                            
+                            st.markdown(f"""
+                            <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                                        padding: 25px; border-radius: 15px; color: white; text-align: center;
+                                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>
+                                <h3 style='margin: 0; color: white; font-size: 1.2em;'>💰 TTF (Europa)</h3>
+                                <h1 style='margin: 15px 0; color: white; font-size: 2.5em; font-weight: bold;'>
+                                    ${prom_ttf:.2f}
+                                </h1>
+                                <p style='margin: 0; color: white; font-size: 1.1em; opacity: 0.95;'>USD/MMBtu</p>
+                                <hr style='border-color: rgba(255,255,255,0.3); margin: 15px 0;'>
+                                <div style='display: flex; justify-content: space-around; margin-top: 10px;'>
+                                    <div>
+                                        <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.9em;'>Mínimo</p>
+                                        <p style='margin: 5px 0; color: white; font-size: 1.1em; font-weight: bold;'>${min_ttf:.2f}</p>
+                                    </div>
+                                    <div>
+                                        <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.9em;'>Máximo</p>
+                                        <p style='margin: 5px 0; color: white; font-size: 1.1em; font-weight: bold;'>${max_ttf:.2f}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # ============================================================
+                # SECCIÓN 2: DEMANDA TOTAL
+                # ============================================================
+                st.markdown("### 📊 Demanda de Gas Natural")
+                
+                if pred_demanda_mes is not None:
+                    col_dem = None
+                    for c in ['Demanda_Total_MBTUD', 'Total_MBTUD', 'Demanda_Total']:
+                        if c in pred_demanda_mes.columns:
+                            col_dem = c
+                            break
+                    
+                    if col_dem:
+                        prom_dem = pred_demanda_mes[col_dem].mean()
+                        min_dem = pred_demanda_mes[col_dem].min()
+                        max_dem = pred_demanda_mes[col_dem].max()
+                        std_dem = pred_demanda_mes[col_dem].std()
+                        
+                        # Card grande para demanda total
+                        st.markdown(f"""
+                        <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                                    padding: 30px; border-radius: 15px; color: white; text-align: center;
+                                    box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px;'>
+                            <h3 style='margin: 0; color: white; font-size: 1.3em;'>🔥 Demanda Total Nacional</h3>
+                            <h1 style='margin: 15px 0; color: white; font-size: 3em; font-weight: bold;'>
+                                {prom_dem:,.0f}
+                            </h1>
+                            <p style='margin: 0; color: white; font-size: 1.2em; opacity: 0.95;'>MBTUD</p>
+                            <hr style='border-color: rgba(255,255,255,0.3); margin: 20px 0;'>
+                            <div style='display: flex; justify-content: space-around; margin-top: 15px;'>
+                                <div>
+                                    <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.95em;'>Mínimo</p>
+                                    <p style='margin: 5px 0; color: white; font-size: 1.2em; font-weight: bold;'>{min_dem:,.0f}</p>
+                                </div>
+                                <div>
+                                    <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.95em;'>Máximo</p>
+                                    <p style='margin: 5px 0; color: white; font-size: 1.2em; font-weight: bold;'>{max_dem:,.0f}</p>
+                                </div>
+                                <div>
+                                    <p style='margin: 0; color: rgba(255,255,255,0.8); font-size: 0.95em;'>Desv. Est.</p>
+                                    <p style='margin: 5px 0; color: white; font-size: 1.2em; font-weight: bold;'>{std_dem:,.0f}</p>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+                
+                # ============================================================
+                # SECCIÓN 3: DEMANDA POR SECTORES
+                # ============================================================
+                st.markdown("### 🏭 Demanda por Sectores y Regiones")
+                
+                if pred_demanda_mes is not None:
+                    sectores_dict = {
+                        "Costa": "Demanda_Costa_Total_MBTUD",
+                        "Interior": "Demanda_Interior_Total_MBTUD",
+                        "Industrial": "Demanda_Industrial_Total_MBTUD",
+                        "Refinería": "Demanda_Refineria_Total_MBTUD",
+                        "Petrolero": "Demanda_Petrolero_Total_MBTUD",
+                        "Generación Térmica": "Demanda_GeneracionTermica_Total_MBTUD",
+                        "Residencial": "Demanda_Residencial_Total_MBTUD",
+                        "Comercial": "Demanda_Comercial_Total_MBTUD",
+                        "GNVC": "Demanda_GNVC_Total_MBTUD",
+                        "Compresora": "Demanda_Compresora_Total_MBTUD"
+                    }
+                    
+                    # Crear tabla de sectores
+                    data_tabla = []
+                    for sector, columna in sectores_dict.items():
+                        if columna in pred_demanda_mes.columns:
+                            prom = pred_demanda_mes[columna].mean()
+                            minimo = pred_demanda_mes[columna].min()
+                            maximo = pred_demanda_mes[columna].max()
+                            data_tabla.append({
+                                'Sector': sector,
+                                'Promedio': f"{prom:,.0f}",
+                                'Mínimo': f"{minimo:,.0f}",
+                                'Máximo': f"{maximo:,.0f}",
+                                'Promedio_Num': prom
+                            })
+                    
+                    if data_tabla:
+                        df_tabla = pd.DataFrame(data_tabla)
+                        df_tabla = df_tabla.sort_values('Promedio_Num', ascending=False)
+                        df_tabla = df_tabla[['Sector', 'Promedio', 'Mínimo', 'Máximo']]
+                        
+                        st.markdown(f"**Promedios de demanda por sector en {mes_resumen} 2026** (en MBTUD)")
+                        st.dataframe(
+                            df_tabla,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Sector": st.column_config.TextColumn("🏭 Sector", width="medium"),
+                                "Promedio": st.column_config.TextColumn("📊 Promedio", width="medium"),
+                                "Mínimo": st.column_config.TextColumn("📉 Mínimo", width="medium"),
+                                "Máximo": st.column_config.TextColumn("📈 Máximo", width="medium"),
+                            }
+                        )
+                        
+                        # Gráfico de barras
+                        st.markdown("#### 📊 Comparación Visual por Sector")
+                        fig_sectores = go.Figure()
+                        
+                        sectores_ordenados = [row['Sector'] for _, row in df_tabla.iterrows()]
+                        promedios_num = [float(row['Promedio'].replace(',', '')) for _, row in df_tabla.iterrows()]
+                        
+                        fig_sectores.add_trace(go.Bar(
+                            x=sectores_ordenados,
+                            y=promedios_num,
+                            marker_color='rgb(79, 172, 254)',
+                            text=[f"{p:,.0f}" for p in promedios_num],
+                            textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Promedio: %{y:,.0f} MBTUD<extra></extra>'
+                        ))
+                        
+                        fig_sectores.update_layout(
+                            title=f"Demanda Promedio por Sector - {mes_resumen} 2026",
+                            xaxis_title="Sector",
+                            yaxis_title="Demanda (MBTUD)",
+                            height=500,
+                            showlegend=False,
+                            hovermode='x'
+                        )
+                        
+                        st.plotly_chart(fig_sectores, use_container_width=True)
+            else:
+                st.error("❌ No hay datos disponibles para mostrar el resumen mensual")
+    
+    # ========================================================================
+    # TAB 2: PRECIOS (antes Tab 1)
+    # ========================================================================
+    with tab2:
         st.markdown("### 💵 Predicción de Precios Internacionales")
         st.markdown("Predicciones para Henry Hub (USA) y TTF (Europa) - Año 2026")
+        
+        # Filtro de mes
+        st.markdown("---")
+        meses_dict = {
+            'Todos los meses': None,
+            'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+            'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+            'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+        }
+        mes_seleccionado = st.selectbox(
+            "📅 Filtrar por mes:",
+            options=list(meses_dict.keys()),
+            key='mes_precios'
+        )
+        mes_numero = meses_dict[mes_seleccionado]
+        
+        # Filtrar datos
+        if mes_numero is not None and datos['pred_precios'] is not None:
+            pred_precios_filtrado = filtrar_por_mes(datos['pred_precios'], mes_numero)
+            st.info(f"📊 Mostrando promedios de **{mes_seleccionado}** (basado en {len(pred_precios_filtrado)} días)")
+            
+            # PANEL DE RESUMEN MENSUAL
+            st.markdown("---")
+            st.markdown(f"### 📋 Resumen de Precios - {mes_seleccionado} 2026")
+            
+            col_res1, col_res2 = st.columns(2)
+            
+            with col_res1:
+                # Henry Hub
+                if 'HenryHub_USD_MMBtu_Predicho' in pred_precios_filtrado.columns:
+                    prom_hh = pred_precios_filtrado['HenryHub_USD_MMBtu_Predicho'].mean()
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 20px; border-radius: 10px; color: white; text-align: center;'>
+                        <h4 style='margin: 0; color: white;'>💰 Henry Hub</h4>
+                        <h2 style='margin: 10px 0; color: white;'>${prom_hh:.2f} USD/MMBtu</h2>
+                        <p style='margin: 0; color: rgba(255,255,255,0.9);'>Promedio {mes_seleccionado}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif 'HenryHub_USD_MMBtu' in pred_precios_filtrado.columns:
+                    prom_hh = pred_precios_filtrado['HenryHub_USD_MMBtu'].mean()
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 20px; border-radius: 10px; color: white; text-align: center;'>
+                        <h4 style='margin: 0; color: white;'>💰 Henry Hub</h4>
+                        <h2 style='margin: 10px 0; color: white;'>${prom_hh:.2f} USD/MMBtu</h2>
+                        <p style='margin: 0; color: rgba(255,255,255,0.9);'>Promedio {mes_seleccionado}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            with col_res2:
+                # TTF
+                if 'TTF_USD_MMBtu_Predicho' in pred_precios_filtrado.columns:
+                    prom_ttf = pred_precios_filtrado['TTF_USD_MMBtu_Predicho'].mean()
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 20px; border-radius: 10px; color: white; text-align: center;'>
+                        <h4 style='margin: 0; color: white;'>💰 TTF</h4>
+                        <h2 style='margin: 10px 0; color: white;'>${prom_ttf:.2f} USD/MMBtu</h2>
+                        <p style='margin: 0; color: rgba(255,255,255,0.9);'>Promedio {mes_seleccionado}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif 'TTF_USD_MMBtu' in pred_precios_filtrado.columns:
+                    prom_ttf = pred_precios_filtrado['TTF_USD_MMBtu'].mean()
+                    st.markdown(f"""
+                    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 20px; border-radius: 10px; color: white; text-align: center;'>
+                        <h4 style='margin: 0; color: white;'>💰 TTF</h4>
+                        <h2 style='margin: 10px 0; color: white;'>${prom_ttf:.2f} USD/MMBtu</h2>
+                        <p style='margin: 0; color: rgba(255,255,255,0.9);'>Promedio {mes_seleccionado}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+        else:
+            pred_precios_filtrado = datos['pred_precios']
+            if pred_precios_filtrado is not None:
+                st.info(f"📊 Mostrando promedio anual 2026 (basado en {len(pred_precios_filtrado)} días)")
+        
+        st.markdown("---")
         
         col1, col2 = st.columns(2)
         
         with col1:
             st.markdown("#### Henry Hub (USD/MMBtu)")
             
-            if datos['pred_precios'] is not None:
+            if pred_precios_filtrado is not None:
                 col_hh_pred = None
                 for c in ['HenryHub_USD_MMBtu_Predicho', 'HenryHub_USD_MMBtu', 'HenryHub']:
-                    if c in datos['pred_precios'].columns:
+                    if c in pred_precios_filtrado.columns:
                         col_hh_pred = c
                         break
                 
@@ -542,17 +892,20 @@ def main():
                             break
                 
                 if col_hh_pred:
-                    fig_hh = crear_grafico_con_historico(
-                        datos['pred_precios'],
-                        datos['historico_precios'],
-                        col_hh_pred,
-                        col_hh_hist,
-                        "Henry Hub - Predicción 2026",
-                        unidad="USD/MMBtu"
-                    )
-                    st.plotly_chart(fig_hh, use_container_width=True)
+                    # Solo mostrar gráfica si es "Todos los meses"
+                    if mes_numero is None:
+                        fig_hh = crear_grafico_con_historico(
+                            datos['pred_precios'],
+                            datos['historico_precios'],
+                            col_hh_pred,
+                            col_hh_hist,
+                            "Henry Hub - Predicción 2026",
+                            unidad="USD/MMBtu"
+                        )
+                        st.plotly_chart(fig_hh, use_container_width=True)
                     
-                    metricas_hh = calcular_metricas(datos['pred_precios'][col_hh_pred])
+                    # Métricas con datos filtrados
+                    metricas_hh = calcular_metricas(pred_precios_filtrado[col_hh_pred])
                     
                     if metricas_hh:
                         col_a, col_b, col_c = st.columns(3)
@@ -563,10 +916,10 @@ def main():
         with col2:
             st.markdown("#### TTF (USD/MMBtu)")
             
-            if datos['pred_precios'] is not None:
+            if pred_precios_filtrado is not None:
                 col_ttf_pred = None
                 for c in ['TTF_USD_MMBtu_Predicho', 'TTF_USD_MMBtu', 'TTF']:
-                    if c in datos['pred_precios'].columns:
+                    if c in pred_precios_filtrado.columns:
                         col_ttf_pred = c
                         break
                 
@@ -578,35 +931,90 @@ def main():
                             break
                 
                 if col_ttf_pred:
-                    fig_ttf = crear_grafico_con_historico(
-                        datos['pred_precios'],
-                        datos['historico_precios'],
-                        col_ttf_pred,
-                        col_ttf_hist,
-                        "TTF - Predicción 2026",
-                        unidad="USD/MMBtu"
-                    )
-                    st.plotly_chart(fig_ttf, use_container_width=True)
+                    # Solo mostrar gráfica si es "Todos los meses"
+                    if mes_numero is None:
+                        fig_ttf = crear_grafico_con_historico(
+                            datos['pred_precios'],
+                            datos['historico_precios'],
+                            col_ttf_pred,
+                            col_ttf_hist,
+                            "TTF - Predicción 2026",
+                            unidad="USD/MMBtu"
+                        )
+                        st.plotly_chart(fig_ttf, use_container_width=True)
                     
-                    metricas_ttf = calcular_metricas(datos['pred_precios'][col_ttf_pred])
+                    # Métricas con datos filtrados
+                    metricas_ttf = calcular_metricas(pred_precios_filtrado[col_ttf_pred])
                     
                     if metricas_ttf:
                         col_a, col_b, col_c = st.columns(3)
                         col_a.metric("📊 Promedio", f"${metricas_ttf['promedio']:.2f}")
                         col_b.metric("📉 Mínimo", f"${metricas_ttf['minimo']:.2f}")
                         col_c.metric("📈 Máximo", f"${metricas_ttf['maximo']:.2f}")
+        
+        # Tablas de promedios mensuales
+        if mes_numero is None:  # Solo mostrar si es "Todos los meses"
+            st.markdown("---")
+            with st.expander("📅 Ver Promedios Mensuales Detallados"):
+                col_tabla1, col_tabla2 = st.columns(2)
+                
+                with col_tabla1:
+                    st.markdown("##### Henry Hub por Mes")
+                    if col_hh_pred and datos['pred_precios'] is not None:
+                        prom_hh = calcular_promedios_mensuales(datos['pred_precios'], col_hh_pred)
+                        if prom_hh is not None:
+                            tabla_hh = prom_hh.copy()
+                            tabla_hh['Promedio'] = tabla_hh['Promedio'].apply(lambda x: f"${x:.2f}")
+                            tabla_hh['Minimo'] = tabla_hh['Minimo'].apply(lambda x: f"${x:.2f}")
+                            tabla_hh['Maximo'] = tabla_hh['Maximo'].apply(lambda x: f"${x:.2f}")
+                            tabla_hh = tabla_hh[['Mes_Nombre', 'Promedio', 'Minimo', 'Maximo']]
+                            tabla_hh.columns = ['Mes', 'Promedio', 'Mín', 'Máx']
+                            st.dataframe(tabla_hh, use_container_width=True, hide_index=True)
+                
+                with col_tabla2:
+                    st.markdown("##### TTF por Mes")
+                    if col_ttf_pred and datos['pred_precios'] is not None:
+                        prom_ttf = calcular_promedios_mensuales(datos['pred_precios'], col_ttf_pred)
+                        if prom_ttf is not None:
+                            tabla_ttf = prom_ttf.copy()
+                            tabla_ttf['Promedio'] = tabla_ttf['Promedio'].apply(lambda x: f"${x:.2f}")
+                            tabla_ttf['Minimo'] = tabla_ttf['Minimo'].apply(lambda x: f"${x:.2f}")
+                            tabla_ttf['Maximo'] = tabla_ttf['Maximo'].apply(lambda x: f"${x:.2f}")
+                            tabla_ttf = tabla_ttf[['Mes_Nombre', 'Promedio', 'Minimo', 'Maximo']]
+                            tabla_ttf.columns = ['Mes', 'Promedio', 'Mín', 'Máx']
+                            st.dataframe(tabla_ttf, use_container_width=True, hide_index=True)
 
     # ========================================================================
-    # TAB 2: DEMANDA TOTAL
+    # TAB 3: DEMANDA TOTAL
     # ========================================================================
-    with tab2:
+    with tab3:
         st.markdown("### 📊 Predicción de Demanda Total de Gas Natural")
         st.markdown("Demanda agregada nacional - Año 2026")
         
-        if datos['pred_demanda'] is not None:
+        # Filtro de mes
+        st.markdown("---")
+        mes_seleccionado_dem = st.selectbox(
+            "📅 Filtrar por mes:",
+            options=list(meses_dict.keys()),
+            key='mes_demanda'
+        )
+        mes_numero_dem = meses_dict[mes_seleccionado_dem]
+        
+        # Filtrar datos
+        if mes_numero_dem is not None and datos['pred_demanda'] is not None:
+            pred_demanda_filtrado = filtrar_por_mes(datos['pred_demanda'], mes_numero_dem)
+            st.info(f"📊 Mostrando promedios de **{mes_seleccionado_dem}** (basado en {len(pred_demanda_filtrado)} días)")
+        else:
+            pred_demanda_filtrado = datos['pred_demanda']
+            if pred_demanda_filtrado is not None:
+                st.info(f"📊 Mostrando promedio anual 2026 (basado en {len(pred_demanda_filtrado)} días)")
+        
+        st.markdown("---")
+        
+        if pred_demanda_filtrado is not None:
             col_dem_pred = None
             for c in ['Demanda_Total_MBTUD', 'Total_MBTUD', 'Demanda_Total']:
-                if c in datos['pred_demanda'].columns:
+                if c in pred_demanda_filtrado.columns:
                     col_dem_pred = c
                     break
             
@@ -618,17 +1026,20 @@ def main():
                         break
             
             if col_dem_pred:
-                fig_dem = crear_grafico_con_historico(
-                    datos['pred_demanda'],
-                    datos['historico_demanda'],
-                    col_dem_pred,
-                    col_dem_hist,
-                    "Demanda Total - Predicción 2026",
-                    unidad="MBTUD"
-                )
-                st.plotly_chart(fig_dem, use_container_width=True)
+                # Solo mostrar gráfica si es "Todos los meses"
+                if mes_numero_dem is None:
+                    fig_dem = crear_grafico_con_historico(
+                        datos['pred_demanda'],
+                        datos['historico_demanda'],
+                        col_dem_pred,
+                        col_dem_hist,
+                        "Demanda Total - Predicción 2026",
+                        unidad="MBTUD"
+                    )
+                    st.plotly_chart(fig_dem, use_container_width=True)
                 
-                metricas_dem = calcular_metricas(datos['pred_demanda'][col_dem_pred])
+                # Métricas con datos filtrados
+                metricas_dem = calcular_metricas(pred_demanda_filtrado[col_dem_pred])
                 
                 if metricas_dem:
                     col1, col2, col3, col4 = st.columns(4)
@@ -637,55 +1048,102 @@ def main():
                     col3.metric("📈 Máximo", f"{metricas_dem['maximo']:,.0f} MBTUD")
                     col4.metric("📊 Desv. Est.", f"{metricas_dem['std']:,.0f} MBTUD")
                 
-                st.markdown("#### 📈 Análisis de Tendencia")
-                valores = datos['pred_demanda'][col_dem_pred].values
-                primer_trimestre = np.mean(valores[:90])
-                ultimo_trimestre = np.mean(valores[-90:])
-                cambio_pct = ((ultimo_trimestre - primer_trimestre) / primer_trimestre) * 100
+                # Análisis de tendencia solo si es "Todos los meses"
+                if mes_numero_dem is None:
+                    st.markdown("#### 📈 Análisis de Tendencia")
+                    valores = datos['pred_demanda'][col_dem_pred].values
+                    primer_trimestre = np.mean(valores[:90])
+                    ultimo_trimestre = np.mean(valores[-90:])
+                    cambio_pct = ((ultimo_trimestre - primer_trimestre) / primer_trimestre) * 100
+                    
+                    col_a, col_b, col_c = st.columns(3)
+                    col_a.metric("Q1 2026", f"{primer_trimestre:,.0f} MBTUD")
+                    col_b.metric("Q4 2026", f"{ultimo_trimestre:,.0f} MBTUD")
+                    col_c.metric("Variación", f"{cambio_pct:+.2f}%")
                 
-                col_a, col_b, col_c = st.columns(3)
-                col_a.metric("Q1 2026", f"{primer_trimestre:,.0f} MBTUD")
-                col_b.metric("Q4 2026", f"{ultimo_trimestre:,.0f} MBTUD")
-                col_c.metric("Variación", f"{cambio_pct:+.2f}%")
+                # Tabla de promedios mensuales
+                st.markdown("---")
+                with st.expander("📅 Ver Promedios Mensuales Detallados"):
+                    promedios_mensuales = calcular_promedios_mensuales(datos['pred_demanda'], col_dem_pred)
+                    if promedios_mensuales is not None:
+                        st.markdown("##### Demanda Total por Mes - 2026")
+                        
+                        # Formatear tabla
+                        tabla_display = promedios_mensuales.copy()
+                        tabla_display['Promedio'] = tabla_display['Promedio'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_display['Minimo'] = tabla_display['Minimo'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_display['Maximo'] = tabla_display['Maximo'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_display['Std'] = tabla_display['Std'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_display = tabla_display[['Mes_Nombre', 'Promedio', 'Minimo', 'Maximo', 'Std']]
+                        tabla_display.columns = ['Mes', 'Promedio', 'Mínimo', 'Máximo', 'Desv. Est.']
+                        
+                        st.dataframe(tabla_display, use_container_width=True, hide_index=True)
 
     # ========================================================================
-    # TAB 3: SECTORES
+    # TAB 4: SECTORES
     # ========================================================================
-    with tab3:
+    with tab4:
         st.markdown("### 🏭 Predicción por Sectores y Regiones")
         
-        sectores_disponibles = {
-            "Costa": "Demanda_Costa_Total_MBTUD",
-            "Interior": "Demanda_Interior_Total_MBTUD",
-            "Industrial": "Demanda_Industrial_Total_MBTUD",
-            "Comercial": "Demanda_Comercial_Total_MBTUD",
-            "Residencial": "Demanda_Residencial_Total_MBTUD",
-            "Petrolero": "Demanda_Petrolero_Total_MBTUD",
-            "Generación Térmica": "Demanda_GeneracionTermica_Total_MBTUD",
-            "GNVC": "Demanda_GNVC_Total_MBTUD",
-            "Refinería": "Demanda_Refineria_Total_MBTUD",
-            "Compresora": "Demanda_Compresora_Total_MBTUD"
-        }
+        # Filtro de mes
+        st.markdown("---")
+        col_filtro1, col_filtro2 = st.columns(2)
         
-        sector_seleccionado = st.selectbox(
-            "Seleccionar sector:",
-            list(sectores_disponibles.keys())
-        )
+        with col_filtro1:
+            sectores_disponibles = {
+                "Costa": "Demanda_Costa_Total_MBTUD",
+                "Interior": "Demanda_Interior_Total_MBTUD",
+                "Industrial": "Demanda_Industrial_Total_MBTUD",
+                "Comercial": "Demanda_Comercial_Total_MBTUD",
+                "Residencial": "Demanda_Residencial_Total_MBTUD",
+                "Petrolero": "Demanda_Petrolero_Total_MBTUD",
+                "Generación Térmica": "Demanda_GeneracionTermica_Total_MBTUD",
+                "GNVC": "Demanda_GNVC_Total_MBTUD",
+                "Refinería": "Demanda_Refineria_Total_MBTUD",
+                "Compresora": "Demanda_Compresora_Total_MBTUD"
+            }
+            
+            sector_seleccionado = st.selectbox(
+                "🏭 Seleccionar sector:",
+                list(sectores_disponibles.keys())
+            )
         
+        with col_filtro2:
+            mes_seleccionado_sector = st.selectbox(
+                "📅 Filtrar por mes:",
+                options=list(meses_dict.keys()),
+                key='mes_sector'
+            )
+        
+        mes_numero_sector = meses_dict[mes_seleccionado_sector]
         columna_sector = sectores_disponibles[sector_seleccionado]
         
-        if datos['pred_demanda'] is not None and columna_sector in datos['pred_demanda'].columns:
-            fig_sector = crear_grafico_con_historico(
-                datos['pred_demanda'],
-                None,
-                columna_sector,
-                None,
-                f"Sector {sector_seleccionado} - Predicción 2026",
-                unidad="MBTUD"
-            )
-            st.plotly_chart(fig_sector, use_container_width=True)
+        # Filtrar datos
+        if mes_numero_sector is not None and datos['pred_demanda'] is not None:
+            pred_sector_filtrado = filtrar_por_mes(datos['pred_demanda'], mes_numero_sector)
+            st.info(f"📊 Mostrando promedios de **{sector_seleccionado}** en **{mes_seleccionado_sector}** (basado en {len(pred_sector_filtrado)} días)")
+        else:
+            pred_sector_filtrado = datos['pred_demanda']
+            if pred_sector_filtrado is not None:
+                st.info(f"📊 Mostrando promedio anual 2026 de **{sector_seleccionado}** (basado en {len(pred_sector_filtrado)} días)")
+        
+        st.markdown("---")
+        
+        if pred_sector_filtrado is not None and columna_sector in pred_sector_filtrado.columns:
+            # Solo mostrar gráfica si es "Todos los meses"
+            if mes_numero_sector is None:
+                fig_sector = crear_grafico_con_historico(
+                    datos['pred_demanda'],
+                    None,
+                    columna_sector,
+                    None,
+                    f"Sector {sector_seleccionado} - Predicción 2026",
+                    unidad="MBTUD"
+                )
+                st.plotly_chart(fig_sector, use_container_width=True)
             
-            metricas_sector = calcular_metricas(datos['pred_demanda'][columna_sector])
+            # Métricas con datos filtrados
+            metricas_sector = calcular_metricas(pred_sector_filtrado[columna_sector])
             
             if metricas_sector:
                 col1, col2, col3, col4 = st.columns(4)
@@ -693,11 +1151,29 @@ def main():
                 col2.metric("📉 Mínimo", f"{metricas_sector['minimo']:,.0f} MBTUD")
                 col3.metric("📈 Máximo", f"{metricas_sector['maximo']:,.0f} MBTUD")
                 col4.metric("📊 Coef. Var.", f"{metricas_sector['cv']:.2f}%")
+            
+            # Tabla de promedios mensuales
+            if mes_numero_sector is None:  # Solo si es "Todos los meses"
+                st.markdown("---")
+                with st.expander(f"📅 Ver Promedios Mensuales de {sector_seleccionado}"):
+                    promedios_sector = calcular_promedios_mensuales(datos['pred_demanda'], columna_sector)
+                    if promedios_sector is not None:
+                        st.markdown(f"##### {sector_seleccionado} por Mes - 2026")
+                        
+                        tabla_sector = promedios_sector.copy()
+                        tabla_sector['Promedio'] = tabla_sector['Promedio'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_sector['Minimo'] = tabla_sector['Minimo'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_sector['Maximo'] = tabla_sector['Maximo'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_sector['Std'] = tabla_sector['Std'].apply(lambda x: f"{x:,.0f} MBTUD")
+                        tabla_sector = tabla_sector[['Mes_Nombre', 'Promedio', 'Minimo', 'Maximo', 'Std']]
+                        tabla_sector.columns = ['Mes', 'Promedio', 'Mínimo', 'Máximo', 'Desv. Est.']
+                        
+                        st.dataframe(tabla_sector, use_container_width=True, hide_index=True)
     
     # ========================================================================
-    # TAB 4: MÉTRICAS DEL MODELO
+    # TAB 5: MÉTRICAS DEL MODELO
     # ========================================================================
-    with tab4:
+    with tab5:
         st.markdown("### 📈 Métricas de Precisión del Modelo")
         st.markdown("Evaluación del desempeño de los modelos de predicción")
         
