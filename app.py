@@ -1,5 +1,5 @@
 """
-ProyectaGAS Dashboard - TPLEnergía
+ProyectaGAS Dashboard - TPLGas
 Dashboard web para predicción de demanda y precios de gas natural
 Desplegado en Streamlit Cloud
 """
@@ -16,7 +16,7 @@ import os
 # ============================================================================
 
 st.set_page_config(
-    page_title="ProyectaGAS - TPLEnergía",
+    page_title="ProyectaGAS - TPLGas",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -277,12 +277,30 @@ def cargar_datos():
     
     archivos = {
         'pred_precios': 'predicciones_futuras_2026.xlsx',
-        'pred_demanda': 'predicciones_2026_ensemble.xlsx',
         'historico_precios': 'df_completo_procesado.csv',
         'historico_demanda': 'Data_Demanda.xlsx',  # Datos hasta enero 2026
         'metricas_ensemble': 'metricas_ensemble.csv',  # Métricas de precisión por variable
         'metricas_resumen': 'metricas_resumen.csv',  # Métricas generales
     }
+    
+    # Intentar cargar predicciones de demanda (primero COMPLETO, luego normal)
+    try:
+        # Intentar archivo COMPLETO con 3 versiones
+        df_demanda = pd.read_excel('predicciones_2026_ensemble_COMPLETO.xlsx')
+        df_demanda['Fecha'] = pd.to_datetime(df_demanda['Fecha'])
+        datos['pred_demanda'] = df_demanda
+        datos['tiene_3_versiones'] = True
+    except:
+        try:
+            # Fallback: archivo normal (1 versión)
+            df_demanda = pd.read_excel('predicciones_2026_ensemble.xlsx')
+            df_demanda['Fecha'] = pd.to_datetime(df_demanda['Fecha'])
+            datos['pred_demanda'] = df_demanda
+            datos['tiene_3_versiones'] = False
+        except Exception as e:
+            st.sidebar.warning(f"⚠️ predicciones_2026_ensemble: {str(e)[:50]}")
+            datos['pred_demanda'] = None
+            datos['tiene_3_versiones'] = False
     
     for key, filename in archivos.items():
         try:
@@ -306,6 +324,25 @@ def cargar_datos():
             datos[key] = None
     
     return datos
+
+def obtener_columna_con_nivel(columna_base, nivel, tiene_3_versiones):
+    """
+    Retorna el nombre de columna correcto según el nivel seleccionado
+    
+    Args:
+        columna_base: Nombre base (ej: 'Demanda_Total_MBTUD')
+        nivel: 'Conservador', 'Moderado', o 'Flexible'
+        tiene_3_versiones: Bool indicando si hay 3 versiones disponibles
+    
+    Returns:
+        Nombre de columna con sufijo si aplica
+    """
+    if not tiene_3_versiones:
+        # Archivo antiguo, retornar nombre original
+        return columna_base
+    
+    # Archivo nuevo, agregar sufijo
+    return f"{columna_base}_{nivel}"
 
 # ============================================================================
 # FUNCIONES DE MÉTRICAS
@@ -491,7 +528,7 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
 def main():
     # Header
     st.markdown('<h1 class="main-header">⚡ ProyectaGAS - Dashboard Empresarial</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLEnergía</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLGas</p>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -519,6 +556,37 @@ def main():
         # Mostrar timestamp de carga
         if 'timestamp_carga' in datos:
             st.caption(f"🕒 Última actualización: {datos['timestamp_carga'].strftime('%H:%M:%S')}")
+        
+        # Selector de nivel de ajuste (solo si tiene 3 versiones)
+        nivel_ajuste = 'Moderado'  # Valor por defecto
+        if datos.get('tiene_3_versiones', False):
+            st.markdown("---")
+            st.markdown("### 🎯 Nivel de Ajuste")
+            
+            nivel_ajuste = st.selectbox(
+                "Selecciona nivel de predicción:",
+                options=['Conservador', 'Moderado', 'Flexible'],
+                index=1,  # Moderado por defecto
+                help="""
+                **Conservador**: Rango más estrecho (95% confiabilidad)
+                **Moderado**: Balance entre seguridad y flexibilidad
+                **Flexible**: Rango más amplio (cubre escenarios extremos)
+                """
+            )
+            
+            # Explicación del nivel seleccionado
+            if nivel_ajuste == 'Conservador':
+                st.caption("📊 Min: 95% P5 | Max: 105% P95")
+            elif nivel_ajuste == 'Moderado':
+                st.caption("📊 Min: 90% P5 | Max: 110% P95")
+            else:
+                st.caption("📊 Min: 80% P5 | Max: 120% P95")
+        else:
+            st.markdown("---")
+            st.info("""
+            💡 **Tip**: Genera el archivo con 3 versiones ejecutando:
+            `08_GENERAR_3_VERSIONES.ipynb`
+            """)
         
         # Botón para limpiar cache y forzar recarga
         if st.button("🔄 Actualizar Datos", use_container_width=True):
@@ -671,13 +739,21 @@ def main():
                 st.markdown("### 📊 Demanda de Gas Natural")
                 
                 if pred_demanda_mes is not None:
-                    col_dem = None
-                    for c in ['Demanda_Total_MBTUD', 'Total_MBTUD', 'Demanda_Total']:
-                        if c in pred_demanda_mes.columns:
-                            col_dem = c
-                            break
+                    # Buscar columna con nivel seleccionado
+                    col_dem = obtener_columna_con_nivel(
+                        'Demanda_Total_MBTUD', 
+                        nivel_ajuste,
+                        datos.get('tiene_3_versiones', False)
+                    )
                     
-                    if col_dem:
+                    # Fallback si no existe
+                    if col_dem not in pred_demanda_mes.columns:
+                        for c in ['Demanda_Total_MBTUD', 'Total_MBTUD', 'Demanda_Total']:
+                            if c in pred_demanda_mes.columns:
+                                col_dem = c
+                                break
+                    
+                    if col_dem and col_dem in pred_demanda_mes.columns:
                         prom_dem = pred_demanda_mes[col_dem].mean()
                         min_dem = pred_demanda_mes[col_dem].min()
                         max_dem = pred_demanda_mes[col_dem].max()
@@ -734,7 +810,18 @@ def main():
                     
                     # Crear tabla de sectores
                     data_tabla = []
-                    for sector, columna in sectores_dict.items():
+                    for sector, columna_base in sectores_dict.items():
+                        # Obtener nombre de columna con nivel
+                        columna = obtener_columna_con_nivel(
+                            columna_base,
+                            nivel_ajuste,
+                            datos.get('tiene_3_versiones', False)
+                        )
+                        
+                        # Fallback a columna original si no existe
+                        if columna not in pred_demanda_mes.columns:
+                            columna = columna_base
+                        
                         if columna in pred_demanda_mes.columns:
                             prom = pred_demanda_mes[columna].mean()
                             minimo = pred_demanda_mes[columna].min()
@@ -1014,11 +1101,19 @@ def main():
         st.markdown("---")
         
         if pred_demanda_filtrado is not None:
-            col_dem_pred = None
-            for c in ['Demanda_Total_MBTUD', 'Total_MBTUD', 'Demanda_Total']:
-                if c in pred_demanda_filtrado.columns:
-                    col_dem_pred = c
-                    break
+            # Buscar columna con nivel seleccionado
+            col_dem_pred = obtener_columna_con_nivel(
+                'Demanda_Total_MBTUD',
+                nivel_ajuste,
+                datos.get('tiene_3_versiones', False)
+            )
+            
+            # Fallback si no existe
+            if col_dem_pred not in pred_demanda_filtrado.columns:
+                for c in ['Demanda_Total_MBTUD', 'Total_MBTUD', 'Demanda_Total']:
+                    if c in pred_demanda_filtrado.columns:
+                        col_dem_pred = c
+                        break
             
             col_dem_hist = None
             if datos['historico_demanda'] is not None:
@@ -1027,7 +1122,7 @@ def main():
                         col_dem_hist = c
                         break
             
-            if col_dem_pred:
+            if col_dem_pred and col_dem_pred in pred_demanda_filtrado.columns:
                 # Solo mostrar gráfica si es "Todos los meses"
                 if mes_numero_dem is None:
                     fig_dem = crear_grafico_con_historico(
@@ -1118,7 +1213,14 @@ def main():
             )
         
         mes_numero_sector = meses_dict[mes_seleccionado_sector]
-        columna_sector = sectores_disponibles[sector_seleccionado]
+        columna_sector_base = sectores_disponibles[sector_seleccionado]
+        
+        # Obtener columna con nivel seleccionado
+        columna_sector = obtener_columna_con_nivel(
+            columna_sector_base,
+            nivel_ajuste,
+            datos.get('tiene_3_versiones', False)
+        )
         
         # Filtrar datos
         if mes_numero_sector is not None and datos['pred_demanda'] is not None:
@@ -1130,6 +1232,11 @@ def main():
                 st.info(f"📊 Mostrando promedio anual 2026 de **{sector_seleccionado}** (basado en {len(pred_sector_filtrado)} días)")
         
         st.markdown("---")
+        
+        # Fallback si columna con nivel no existe
+        if pred_sector_filtrado is not None:
+            if columna_sector not in pred_sector_filtrado.columns:
+                columna_sector = columna_sector_base
         
         if pred_sector_filtrado is not None and columna_sector in pred_sector_filtrado.columns:
             # Solo mostrar gráfica si es "Todos los meses"
@@ -1301,7 +1408,7 @@ def main():
             Sistema Inteligente de Predicción de Demanda y Precios
         </p>
         <p style='color: rgba(255,255,255,0.8); margin: 5px 0;'>
-            TPLEnergía | Febrero 2026
+            TPLGas | Febrero 2026
         </p>
         <p style='color: rgba(255,255,255,0.7); margin: 5px 0; font-size: 0.9em;'>
             Powered by Machine Learning & Streamlit Cloud
