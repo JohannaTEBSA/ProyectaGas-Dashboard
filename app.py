@@ -535,6 +535,14 @@ def main():
         - ✅ Métricas de precisión
         """)
     
+    # Definir diccionario de meses (usado en todos los tabs)
+    meses_dict = {
+        'Todos los meses': None,
+        'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+        'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+        'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+    }
+    
     # Tabs principales
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📅 Resumen Mensual", 
@@ -795,12 +803,6 @@ def main():
         
         # Filtro de mes
         st.markdown("---")
-        meses_dict = {
-            'Todos los meses': None,
-            'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
-            'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
-            'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
-        }
         mes_seleccionado = st.selectbox(
             "📅 Filtrar por mes:",
             options=list(meses_dict.keys()),
