@@ -1,5 +1,5 @@
 """
-ProyectaGAS Dashboard - TPLGas
+ProyectaGAS Dashboard - TPLEnergía
 Dashboard web para predicción de demanda y precios de gas natural
 Desplegado en Streamlit Cloud
 """
@@ -16,7 +16,7 @@ import os
 # ============================================================================
 
 st.set_page_config(
-    page_title="ProyectaGAS - TPLGas",
+    page_title="ProyectaGAS - TPLEnergía",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -267,10 +267,13 @@ st.markdown("""
 # FUNCIONES DE CARGA DE DATOS
 # ============================================================================
 
-@st.cache_data
+@st.cache_data(ttl=60)  # Cache por solo 60 segundos
 def cargar_datos():
     """Carga todos los archivos de predicciones y datos históricos"""
     datos = {}
+    
+    # Timestamp de carga
+    datos['timestamp_carga'] = datetime.now()
     
     archivos = {
         'pred_precios': 'predicciones_futuras_2026.xlsx',
@@ -398,19 +401,29 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
                 # Si falla, continuar sin la línea
                 pass
     
-    # Calcular rango apropiado del eje Y
+    # Calcular rango apropiado del eje Y (enfocado en datos relevantes)
     all_values = []
+    
+    # Usar solo los últimos 180 días del histórico (ya filtrados)
     if df_hist is not None and columna_hist in df_hist.columns:
-        all_values.extend(df_hist[columna_hist].dropna().values)
+        hist_filtrado_temp = df_hist.tail(180)
+        hist_valores = hist_filtrado_temp[columna_hist].dropna().values
+        all_values.extend(hist_valores)
+    
+    # Agregar predicciones
     if df_pred is not None and columna_pred in df_pred.columns:
-        all_values.extend(df_pred[columna_pred].dropna().values)
+        pred_valores = df_pred[columna_pred].dropna().values
+        all_values.extend(pred_valores)
     
     if all_values:
         y_min = min(all_values)
         y_max = max(all_values)
         y_range = y_max - y_min
-        y_min_plot = y_min - (y_range * 0.1)
-        y_max_plot = y_max + (y_range * 0.1)
+        
+        # Margen reducido para ver mejor fluctuaciones (5% en lugar de 10%)
+        margen = y_range * 0.05
+        y_min_plot = max(0, y_min - margen)  # No permitir negativos
+        y_max_plot = y_max + margen
     else:
         y_min_plot = None
         y_max_plot = None
@@ -455,7 +468,7 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
 def main():
     # Header
     st.markdown('<h1 class="main-header">⚡ ProyectaGAS - Dashboard Empresarial</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLGas</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLEnergía</p>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -472,13 +485,22 @@ def main():
         st.markdown("### 📁 Estado de Datos")
         datos = cargar_datos()
         
-        archivos_ok = sum(1 for v in datos.values() if v is not None)
-        total_archivos = len(datos)
+        archivos_ok = sum(1 for k, v in datos.items() if k != 'timestamp_carga' and v is not None)
+        total_archivos = len([k for k in datos.keys() if k != 'timestamp_carga'])
         
         if archivos_ok == total_archivos:
             st.success(f"✅ {archivos_ok}/{total_archivos} archivos cargados")
         else:
             st.warning(f"⚠️ {archivos_ok}/{total_archivos} archivos cargados")
+        
+        # Mostrar timestamp de carga
+        if 'timestamp_carga' in datos:
+            st.caption(f"🕒 Última actualización: {datos['timestamp_carga'].strftime('%H:%M:%S')}")
+        
+        # Botón para limpiar cache y forzar recarga
+        if st.button("🔄 Actualizar Datos", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
         
         st.markdown("---")
         st.markdown("### ℹ️ Información")
