@@ -1,5 +1,5 @@
 """
-Dashboard de Predicciones - TPLEnergía
+ProyectaGAS Dashboard - TPLGas
 Dashboard web para predicción de demanda y precios de gas natural
 Desplegado en Streamlit Cloud
 """
@@ -16,7 +16,7 @@ import os
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard de Predicciones - TPLEnergía",
+    page_title="ProyectaGAS - TPLGas",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -281,11 +281,11 @@ def cargar_datos():
         'historico_demanda': 'Data_Demanda.xlsx',  # Datos hasta enero 2026
     }
     
-    # Métricas: Priorizar archivos del notebook 08 (con 3 versiones)
-    # Si no existen, usar archivos del notebook 07
+    # Métricas: Priorizar archivos del modelo original (correctos)
+    # Las métricas de 3versiones son aproximadas y no representan la precisión real
     archivos_metricas = {
-        'metricas_ensemble': ['metricas_3versiones.csv', 'metricas_ensemble.csv'],
-        'metricas_resumen': ['metricas_3versiones_resumen.csv', 'metricas_resumen.csv'],
+        'metricas_ensemble': ['metricas_ensemble.csv', 'metricas_3versiones.csv'],
+        'metricas_resumen': ['metricas_resumen.csv', 'metricas_3versiones_resumen.csv'],
     }
     
     # Intentar cargar predicciones de demanda (primero COMPLETO, luego normal)
@@ -363,6 +363,43 @@ def obtener_columna_con_nivel(columna_base, nivel, tiene_3_versiones):
     
     # Archivo nuevo, agregar sufijo
     return f"{columna_base}_{nivel}"
+
+def obtener_intervalos_confianza(df, columna_base, nivel, tiene_3_versiones):
+    """
+    Obtiene los límites del intervalo de confianza si existen.
+    
+    Args:
+        df: DataFrame con las predicciones
+        columna_base: Nombre base de la columna (ej: 'Demanda_Total_MBTUD')
+        nivel: 'Conservador', 'Moderado', o 'Flexible'
+        tiene_3_versiones: Bool indicando si hay 3 versiones
+    
+    Returns:
+        tuple: (Serie lower, Serie upper, str nivel_confianza) o (None, None, None) si no existen intervalos
+        
+    Niveles de confianza:
+        - Conservador: ~68% (±1 desviación estándar)
+        - Moderado: ~87% (±1.5 desviaciones estándar)
+        - Flexible: ~95% (±2 desviaciones estándar)
+    """
+    if not tiene_3_versiones:
+        return None, None, None
+    
+    col_lower = f"{columna_base}_{nivel}_Lower"
+    col_upper = f"{columna_base}_{nivel}_Upper"
+    
+    if col_lower in df.columns and col_upper in df.columns:
+        # Mapeo de nivel a confianza estadística
+        confianza_map = {
+            'Conservador': '68%',
+            'Moderado': '87%',
+            'Flexible': '95%'
+        }
+        nivel_confianza = confianza_map.get(nivel, 'desconocido')
+        
+        return df[col_lower], df[col_upper], nivel_confianza
+    else:
+        return None, None, None
 
 # ============================================================================
 # FUNCIONES DE MÉTRICAS
@@ -547,8 +584,8 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
 
 def main():
     # Header
-    st.markdown('<h1 class="main-header">⚡ Dashboard de Predicciones - TPLEnergía </h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLEnergía</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">⚡ ProyectaGAS - Dashboard Empresarial</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLGas</p>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -588,24 +625,28 @@ def main():
                 options=['Conservador', 'Moderado', 'Flexible'],
                 index=1,  # Moderado por defecto
                 help="""
-                **Conservador**: Rango más estrecho (95% confiabilidad)
-                **Moderado**: Balance entre seguridad y flexibilidad
-                **Flexible**: Rango más amplio (cubre escenarios extremos)
+                **Conservador**: Intervalo estrecho (~68% confianza, ±1 desviación estándar)
+                **Moderado**: Balance óptimo (~87% confianza, ±1.5 desviaciones estándar)
+                **Flexible**: Intervalo amplio (~95% confianza, ±2 desviaciones estándar)
+                
+                ℹ️ Los 3 niveles muestran la MISMA predicción óptima del modelo.
+                Solo cambia el rango de incertidumbre estadístico.
                 """
             )
             
             # Explicación del nivel seleccionado
             if nivel_ajuste == 'Conservador':
-                st.caption("📊 Min: 95% P5 | Max: 105% P95")
+                st.caption("📊 Intervalo: ±1 desviación estándar (~68% confianza)")
             elif nivel_ajuste == 'Moderado':
-                st.caption("📊 Min: 90% P5 | Max: 110% P95")
+                st.caption("📊 Intervalo: ±1.5 desviaciones estándar (~87% confianza)")
             else:
-                st.caption("📊 Min: 80% P5 | Max: 120% P95")
+                st.caption("📊 Intervalo: ±2 desviaciones estándar (~95% confianza)")
         else:
             st.markdown("---")
             st.info("""
-            💡 **Tip**: Genera el archivo con 3 versiones ejecutando:
-            `08_GENERAR_3_VERSIONES.ipynb`
+            💡 **Tip**: Para habilitar intervalos de confianza y selector de nivel, 
+            ejecuta las celdas adicionales del notebook:
+            `08_ENSEMBLE_FINAL_CON_INTERVALOS_CONFIANZA.ipynb`
             """)
         
         # Botón para limpiar cache y forzar recarga
@@ -1450,12 +1491,12 @@ def main():
     st.markdown("""
     <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 border-radius: 15px; margin-top: 40px;'>
-        <h3 style='color: white; margin: 0; font-weight: 700;'>⚡ TPLEnergía </h3>
+        <h3 style='color: white; margin: 0; font-weight: 700;'>⚡ ProyectaGAS</h3>
         <p style='color: rgba(255,255,255,0.9); margin: 10px 0; font-size: 1.1em;'>
             Sistema Inteligente de Predicción de Demanda y Precios
         </p>
         <p style='color: rgba(255,255,255,0.8); margin: 5px 0;'>
-            TPLEnergía | Febrero 2026
+            TPLGas | Febrero 2026
         </p>
         <p style='color: rgba(255,255,255,0.7); margin: 5px 0; font-size: 0.9em;'>
             Powered by Machine Learning & Streamlit Cloud
