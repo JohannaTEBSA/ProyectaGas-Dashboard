@@ -1,5 +1,5 @@
 """
-Dashboard de Predicciones - TPLEnergía
+ProyectaGAS Dashboard - TPLGas
 Dashboard web para predicción de demanda y precios de gas natural
 Desplegado en Streamlit Cloud
 """
@@ -16,7 +16,7 @@ import os
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard de Predicciones - TPLEnergía",
+    page_title="ProyectaGAS - TPLGas",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -347,12 +347,12 @@ def cargar_datos():
 
 def obtener_columna_con_nivel(columna_base, nivel, tiene_3_versiones):
     """
-    Retorna el nombre de columna correcto según el nivel seleccionado
+    Retorna el nombre de columna correcto según el escenario seleccionado
     
     Args:
         columna_base: Nombre base (ej: 'Demanda_Total_MBTUD')
         nivel: 'Conservador', 'Moderado', o 'Flexible'
-        tiene_3_versiones: Bool indicando si hay 3 versiones disponibles
+        tiene_3_versiones: Bool indicando si hay 3 escenarios disponibles
     
     Returns:
         Nombre de columna con sufijo si aplica
@@ -361,45 +361,8 @@ def obtener_columna_con_nivel(columna_base, nivel, tiene_3_versiones):
         # Archivo antiguo, retornar nombre original
         return columna_base
     
-    # Archivo nuevo, agregar sufijo
+    # Archivo nuevo con escenarios, agregar sufijo
     return f"{columna_base}_{nivel}"
-
-def obtener_intervalos_confianza(df, columna_base, nivel, tiene_3_versiones):
-    """
-    Obtiene los límites del intervalo de confianza si existen.
-    
-    Args:
-        df: DataFrame con las predicciones
-        columna_base: Nombre base de la columna (ej: 'Demanda_Total_MBTUD')
-        nivel: 'Conservador', 'Moderado', o 'Flexible'
-        tiene_3_versiones: Bool indicando si hay 3 versiones
-    
-    Returns:
-        tuple: (Serie lower, Serie upper, str nivel_confianza) o (None, None, None) si no existen intervalos
-        
-    Niveles de confianza:
-        - Conservador: ~68% (±1 desviación estándar)
-        - Moderado: ~87% (±1.5 desviaciones estándar)
-        - Flexible: ~95% (±2 desviaciones estándar)
-    """
-    if not tiene_3_versiones:
-        return None, None, None
-    
-    col_lower = f"{columna_base}_{nivel}_Lower"
-    col_upper = f"{columna_base}_{nivel}_Upper"
-    
-    if col_lower in df.columns and col_upper in df.columns:
-        # Mapeo de nivel a confianza estadística
-        confianza_map = {
-            'Conservador': '68%',
-            'Moderado': '87%',
-            'Flexible': '95%'
-        }
-        nivel_confianza = confianza_map.get(nivel, 'desconocido')
-        
-        return df[col_lower], df[col_upper], nivel_confianza
-    else:
-        return None, None, None
 
 # ============================================================================
 # FUNCIONES DE MÉTRICAS
@@ -584,8 +547,8 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
 
 def main():
     # Header
-    st.markdown('<h1 class="main-header">⚡ TPLEnergía - Dashboard Empresarial</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLEnergía</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">⚡ ProyectaGAS - Dashboard Empresarial</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLGas</p>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -618,41 +581,108 @@ def main():
         nivel_ajuste = 'Moderado'  # Valor por defecto
         if datos.get('tiene_3_versiones', False):
             st.markdown("---")
-            st.markdown("### 🎯 Nivel de Ajuste")
+            st.markdown("### 🎯 Escenarios de Planificación")
             
             nivel_ajuste = st.selectbox(
-                "Selecciona nivel de predicción:",
+                "Selecciona escenario de planificación:",
                 options=['Conservador', 'Moderado', 'Flexible'],
                 index=1,  # Moderado por defecto
                 help="""
-                **Conservador**: Intervalo estrecho (~68% confianza, ±1 desviación estándar)
-                **Moderado**: Balance óptimo (~87% confianza, ±1.5 desviaciones estándar)
-                **Flexible**: Intervalo amplio (~95% confianza, ±2 desviaciones estándar)
+                **🎯 Escenarios de Planificación Basados en Intervalos de Confianza:**
                 
-                ℹ️ Los 3 niveles muestran la MISMA predicción óptima del modelo.
-                Solo cambia el rango de incertidumbre estadístico.
+                📉 **Conservador** (Pesimista - Límite inferior):
+                   • 87% probabilidad que valor real sea ≥ este escenario
+                   • Uso: Presupuestos mínimos garantizados, bajo riesgo
+                   • Ejemplo: Planificar capacidad para escenario bajo
+                
+                ⭐ **Moderado** (Base - Predicción óptima):
+                   • Mejor estimación puntual del modelo
+                   • Métricas: MAPE 1-3%, R² 0.90-0.95 ✅
+                   • Uso: Planificación estándar, reportes ejecutivos
+                
+                📈 **Flexible** (Optimista - Límite superior):
+                   • 87% probabilidad que valor real sea ≤ este escenario
+                   • Uso: Capacidad máxima, preparación para escenarios altos
+                   • Ejemplo: Dimensionar infraestructura para picos
+                
+                ℹ️ Los 3 escenarios muestran valores DIFERENTES para que puedas 
+                planificar bajo distintos niveles de riesgo, manteniendo las 
+                métricas excelentes del modelo.
                 """
             )
             
-            # Explicación del nivel seleccionado
-            if nivel_ajuste == 'Conservador':
-                st.caption("📊 Intervalo: ±1 desviación estándar (~68% confianza)")
-            elif nivel_ajuste == 'Moderado':
-                st.caption("📊 Intervalo: ±1.5 desviaciones estándar (~87% confianza)")
-            else:
-                st.caption("📊 Intervalo: ±2 desviaciones estándar (~95% confianza)")
+            # Explicación del escenario seleccionado
+            col_info1, col_info2 = st.columns([3, 1])
+            with col_info1:
+                if nivel_ajuste == 'Conservador':
+                    st.caption("📉 **Escenario Pesimista**: Límite inferior del intervalo (~87% probabilidad valor ≥ esto)")
+                elif nivel_ajuste == 'Moderado':
+                    st.caption("⭐ **Escenario Base**: Predicción óptima del modelo (MAPE 1-3%)")
+                else:
+                    st.caption("📈 **Escenario Optimista**: Límite superior del intervalo (~87% probabilidad valor ≤ esto)")
+            
+            with col_info2:
+                # Indicador visual del escenario activo
+                emoji_map = {
+                    'Conservador': '📉',
+                    'Moderado': '⭐',
+                    'Flexible': '📈'
+                }
+                st.success(f"{emoji_map[nivel_ajuste]} **{nivel_ajuste}**")
+            
+            # Mensaje explicativo
+            st.info(f"""
+            💡 **Escenario actual: {nivel_ajuste}**
+            
+            {'Este escenario muestra el límite inferior (pesimista) del intervalo de confianza. Útil para presupuestos conservadores.' if nivel_ajuste == 'Conservador' else ''}
+            {'Este escenario muestra la predicción óptima del modelo. Las métricas (MAPE 1-3%) se calculan sobre este escenario.' if nivel_ajuste == 'Moderado' else ''}
+            {'Este escenario muestra el límite superior (optimista) del intervalo de confianza. Útil para planificar capacidad máxima.' if nivel_ajuste == 'Flexible' else ''}
+            """)
         else:
             st.markdown("---")
             st.info("""
-            💡 **Tip**: Para habilitar intervalos de confianza y selector de nivel, 
-            ejecuta las celdas adicionales del notebook:
-            `08_ENSEMBLE_FINAL_CON_INTERVALOS_CONFIANZA.ipynb`
+            💡 **Escenarios de Planificación Disponibles**
+            
+            Ejecuta el notebook actualizado para habilitar 3 escenarios:
+            - 📉 **Conservador**: Escenario pesimista (límite inferior)
+            - ⭐ **Moderado**: Predicción óptima del modelo  
+            - 📈 **Flexible**: Escenario optimista (límite superior)
+            
+            Notebook: `08_ENSEMBLE_FINAL_CON_ESCENARIOS.ipynb`
             """)
         
         # Botón para limpiar cache y forzar recarga
         if st.button("🔄 Actualizar Datos", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
+        
+        # Sección de diagnóstico (expandible)
+        with st.expander("🔍 Información del Sistema"):
+            if datos.get('tiene_3_versiones', False):
+                st.success("✅ Archivo con 3 escenarios detectado")
+                st.caption(f"Escenario activo: **{nivel_ajuste}**")
+                
+                # Información sobre escenarios
+                if datos['pred_demanda'] is not None:
+                    col_names = datos['pred_demanda'].columns.tolist()
+                    tiene_conservador = any('Conservador' in col for col in col_names)
+                    tiene_moderado = any('Moderado' in col for col in col_names)
+                    tiene_flexible = any('Flexible' in col for col in col_names)
+                    
+                    if tiene_conservador and tiene_moderado and tiene_flexible:
+                        st.info("📊 3 escenarios de planificación disponibles")
+                        st.caption("Los escenarios muestran valores DIFERENTES")
+                    else:
+                        st.warning("⚠️ Estructura de escenarios incompleta")
+            else:
+                st.warning("⚠️ Usando archivo base (sin escenarios)")
+            
+            # Información de columnas
+            if datos['pred_demanda'] is not None:
+                st.caption(f"Columnas en predicciones: {len(datos['pred_demanda'].columns)}")
+                if datos.get('tiene_3_versiones', False):
+                    st.caption("Esperado: ~34 columnas (Fecha + 11 vars × 3 escenarios)")
+
         
         st.markdown("---")
         st.markdown("### ℹ️ Información")
@@ -1491,12 +1521,12 @@ def main():
     st.markdown("""
     <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 border-radius: 15px; margin-top: 40px;'>
-        <h3 style='color: white; margin: 0; font-weight: 700;'>⚡ TPLEnergía </h3>
+        <h3 style='color: white; margin: 0; font-weight: 700;'>⚡ ProyectaGAS</h3>
         <p style='color: rgba(255,255,255,0.9); margin: 10px 0; font-size: 1.1em;'>
             Sistema Inteligente de Predicción de Demanda y Precios
         </p>
         <p style='color: rgba(255,255,255,0.8); margin: 5px 0;'>
-            TPLEnergía | Febrero 2026
+            TPLGas | Febrero 2026
         </p>
         <p style='color: rgba(255,255,255,0.7); margin: 5px 0; font-size: 0.9em;'>
             Powered by Machine Learning & Streamlit Cloud
