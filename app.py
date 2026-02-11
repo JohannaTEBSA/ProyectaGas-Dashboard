@@ -1,5 +1,5 @@
 """
-ProyectaGAS Dashboard - TPLGas
+Dashboard de Predicciones - TPLEnergía
 Dashboard web para predicción de demanda y precios de gas natural
 Desplegado en Streamlit Cloud
 """
@@ -16,7 +16,7 @@ import os
 # ============================================================================
 
 st.set_page_config(
-    page_title="ProyectaGAS - TPLGas",
+    page_title="Dashboard de Predicciones - TPLEnergía",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -584,8 +584,8 @@ def crear_grafico_con_historico(df_pred, df_hist, columna_pred, columna_hist, ti
 
 def main():
     # Header
-    st.markdown('<h1 class="main-header">⚡ ProyectaGAS - Dashboard Empresarial</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLGas</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">⚡ TPLEnergía - Dashboard Empresarial</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Sistema de Predicción de Demanda y Precios de Gas Natural | TPLEnergía</p>', unsafe_allow_html=True)
     
     # Sidebar
     with st.sidebar:
@@ -1491,12 +1491,12 @@ def main():
     st.markdown("""
     <div style='text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 border-radius: 15px; margin-top: 40px;'>
-        <h3 style='color: white; margin: 0; font-weight: 700;'>⚡ ProyectaGAS</h3>
+        <h3 style='color: white; margin: 0; font-weight: 700;'>⚡ TPLEnergía </h3>
         <p style='color: rgba(255,255,255,0.9); margin: 10px 0; font-size: 1.1em;'>
             Sistema Inteligente de Predicción de Demanda y Precios
         </p>
         <p style='color: rgba(255,255,255,0.8); margin: 5px 0;'>
-            TPLGas | Febrero 2026
+            TPLEnergía | Febrero 2026
         </p>
         <p style='color: rgba(255,255,255,0.7); margin: 5px 0; font-size: 0.9em;'>
             Powered by Machine Learning & Streamlit Cloud
