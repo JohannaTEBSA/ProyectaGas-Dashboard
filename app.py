@@ -583,72 +583,45 @@ def main():
             st.markdown("---")
             st.markdown("### 🎯 Escenarios de Planificación")
             
+            # Selector compacto
             nivel_ajuste = st.selectbox(
-                "Selecciona escenario de planificación:",
+                "Escenario:",
                 options=['Conservador', 'Moderado', 'Flexible'],
-                index=1,  # Moderado por defecto
-                help="""
-                **🎯 Escenarios de Planificación Basados en Intervalos de Confianza:**
-                
-                📉 **Conservador** (Pesimista - Límite inferior):
-                   • 87% probabilidad que valor real sea ≥ este escenario
-                   • Uso: Presupuestos mínimos garantizados, bajo riesgo
-                   • Ejemplo: Planificar capacidad para escenario bajo
-                
-                ⭐ **Moderado** (Base - Predicción óptima):
-                   • Mejor estimación puntual del modelo
-                   • Métricas: MAPE 1-3%, R² 0.90-0.95 ✅
-                   • Uso: Planificación estándar, reportes ejecutivos
-                
-                📈 **Flexible** (Optimista - Límite superior):
-                   • 87% probabilidad que valor real sea ≤ este escenario
-                   • Uso: Capacidad máxima, preparación para escenarios altos
-                   • Ejemplo: Dimensionar infraestructura para picos
-                
-                ℹ️ Los 3 escenarios muestran valores DIFERENTES para que puedas 
-                planificar bajo distintos niveles de riesgo, manteniendo las 
-                métricas excelentes del modelo.
-                """
+                index=1,
+                help="Conservador: escenario bajo | Moderado: predicción óptima | Flexible: escenario alto"
             )
             
-            # Explicación del escenario seleccionado
-            col_info1, col_info2 = st.columns([3, 1])
-            with col_info1:
-                if nivel_ajuste == 'Conservador':
-                    st.caption("📉 **Escenario Pesimista**: Límite inferior del intervalo (~87% probabilidad valor ≥ esto)")
-                elif nivel_ajuste == 'Moderado':
-                    st.caption("⭐ **Escenario Base**: Predicción óptima del modelo (MAPE 1-3%)")
-                else:
-                    st.caption("📈 **Escenario Optimista**: Límite superior del intervalo (~87% probabilidad valor ≤ esto)")
+            # Badge del escenario activo
+            emoji_map = {
+                'Conservador': '📉',
+                'Moderado': '⭐',
+                'Flexible': '📈'
+            }
+            color_map = {
+                'Conservador': '#ff6b6b',
+                'Moderado': '#51cf66', 
+                'Flexible': '#339af0'
+            }
             
-            with col_info2:
-                # Indicador visual del escenario activo
-                emoji_map = {
-                    'Conservador': '📉',
-                    'Moderado': '⭐',
-                    'Flexible': '📈'
-                }
-                st.success(f"{emoji_map[nivel_ajuste]} **{nivel_ajuste}**")
+            st.markdown(f"""
+            <div style='background: {color_map[nivel_ajuste]}; color: white; padding: 8px 12px; 
+                        border-radius: 6px; text-align: center; margin: 8px 0; font-weight: 600;'>
+                {emoji_map[nivel_ajuste]} {nivel_ajuste}
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Mensaje explicativo
-            st.info(f"""
-            💡 **Escenario actual: {nivel_ajuste}**
-            
-            {'Este escenario muestra el límite inferior (pesimista) del intervalo de confianza. Útil para presupuestos conservadores.' if nivel_ajuste == 'Conservador' else ''}
-            {'Este escenario muestra la predicción óptima del modelo. Las métricas (MAPE 1-3%) se calculan sobre este escenario.' if nivel_ajuste == 'Moderado' else ''}
-            {'Este escenario muestra el límite superior (optimista) del intervalo de confianza. Útil para planificar capacidad máxima.' if nivel_ajuste == 'Flexible' else ''}
-            """)
+            # Descripción compacta
+            descripciones = {
+                'Conservador': 'Límite inferior (87% prob ≥ esto)',
+                'Moderado': 'Predicción óptima (MAPE 1-3%)',
+                'Flexible': 'Límite superior (87% prob ≤ esto)'
+            }
+            st.caption(descripciones[nivel_ajuste])
         else:
             st.markdown("---")
             st.info("""
-            💡 **Escenarios de Planificación Disponibles**
-            
-            Ejecuta el notebook actualizado para habilitar 3 escenarios:
-            - 📉 **Conservador**: Escenario pesimista (límite inferior)
-            - ⭐ **Moderado**: Predicción óptima del modelo  
-            - 📈 **Flexible**: Escenario optimista (límite superior)
-            
-            Notebook: `08_ENSEMBLE_FINAL_CON_ESCENARIOS.ipynb`
+            💡 **Ejecuta el notebook para activar 3 escenarios:**
+            `08_ENSEMBLE_FINAL_CON_ESCENARIOS.ipynb`
             """)
         
         # Botón para limpiar cache y forzar recarga
@@ -657,42 +630,24 @@ def main():
             st.rerun()
         
         # Sección de diagnóstico (expandible)
-        with st.expander("🔍 Información del Sistema"):
+        with st.expander("🔍 Info Sistema"):
             if datos.get('tiene_3_versiones', False):
-                st.success("✅ Archivo con 3 escenarios detectado")
-                st.caption(f"Escenario activo: **{nivel_ajuste}**")
-                
-                # Información sobre escenarios
+                st.success("✅ 3 escenarios activos")
                 if datos['pred_demanda'] is not None:
-                    col_names = datos['pred_demanda'].columns.tolist()
-                    tiene_conservador = any('Conservador' in col for col in col_names)
-                    tiene_moderado = any('Moderado' in col for col in col_names)
-                    tiene_flexible = any('Flexible' in col for col in col_names)
-                    
-                    if tiene_conservador and tiene_moderado and tiene_flexible:
-                        st.info("📊 3 escenarios de planificación disponibles")
-                        st.caption("Los escenarios muestran valores DIFERENTES")
-                    else:
-                        st.warning("⚠️ Estructura de escenarios incompleta")
+                    st.caption(f"📊 {len(datos['pred_demanda'].columns)} columnas")
             else:
-                st.warning("⚠️ Usando archivo base (sin escenarios)")
-            
-            # Información de columnas
-            if datos['pred_demanda'] is not None:
-                st.caption(f"Columnas en predicciones: {len(datos['pred_demanda'].columns)}")
-                if datos.get('tiene_3_versiones', False):
-                    st.caption("Esperado: ~34 columnas (Fecha + 11 vars × 3 escenarios)")
+                st.warning("⚠️ Archivo base")
 
         
         st.markdown("---")
         st.markdown("### ℹ️ Información")
-        st.info("""
-        **Características:**
-        - ✅ Comparación con datos reales
-        - ✅ Unidades visibles
-        - ✅ Rangos optimizados
-        - ✅ Métricas de precisión
-        """)
+        with st.expander("Ver características"):
+            st.info("""
+            ✅ Datos históricos reales
+            ✅ Predicciones optimizadas
+            ✅ Métricas de precisión
+            ✅ 3 escenarios de planificación
+            """)
     
     # Definir diccionario de meses (usado en todos los tabs)
     meses_dict = {
