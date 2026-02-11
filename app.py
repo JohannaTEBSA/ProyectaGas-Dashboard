@@ -279,8 +279,13 @@ def cargar_datos():
         'pred_precios': 'predicciones_futuras_2026.xlsx',
         'historico_precios': 'df_completo_procesado.csv',
         'historico_demanda': 'Data_Demanda.xlsx',  # Datos hasta enero 2026
-        'metricas_ensemble': 'metricas_ensemble.csv',  # Métricas de precisión por variable
-        'metricas_resumen': 'metricas_resumen.csv',  # Métricas generales
+    }
+    
+    # Métricas: Priorizar archivos del notebook 08 (con 3 versiones)
+    # Si no existen, usar archivos del notebook 07
+    archivos_metricas = {
+        'metricas_ensemble': ['metricas_3versiones.csv', 'metricas_ensemble.csv'],
+        'metricas_resumen': ['metricas_3versiones_resumen.csv', 'metricas_resumen.csv'],
     }
     
     # Intentar cargar predicciones de demanda (primero COMPLETO, luego normal)
@@ -321,6 +326,21 @@ def cargar_datos():
             datos[key] = df
         except Exception as e:
             st.sidebar.warning(f"⚠️ {filename}: {str(e)[:50]}")
+            datos[key] = None
+    
+    # Cargar métricas (probar múltiples nombres)
+    for key, filenames in archivos_metricas.items():
+        cargado = False
+        for filename in filenames:
+            try:
+                df = pd.read_csv(filename)
+                datos[key] = df
+                cargado = True
+                break  # Usar el primero que funcione
+            except:
+                continue
+        
+        if not cargado:
             datos[key] = None
     
     return datos
@@ -1294,11 +1314,22 @@ def main():
             if datos['metricas_ensemble'] is not None:
                 df_metricas = datos['metricas_ensemble'].copy()
                 
-                # Formatear para mostrar
-                df_display = df_metricas.copy()
-                df_display['MAPE_Test'] = df_display['MAPE_Test'].apply(lambda x: f"{x:.2f}%")
-                df_display['R2_Test'] = df_display['R2_Test'].apply(lambda x: f"{x:.3f}")
-                df_display.columns = ['Variable', 'MAPE (%)', 'R² Score', 'Ensemble']
+                # Verificar qué columnas tiene el archivo
+                if 'MAPE' in df_metricas.columns:
+                    # Nuevo formato del notebook (con 3 versiones)
+                    df_display = df_metricas[['Variable', 'MAPE', 'Promedio_Predicho', 'Promedio_Historico']].copy()
+                    df_display.columns = ['Variable', 'MAPE', 'Prom. Predicho', 'Prom. Histórico']
+                elif 'MAPE_Test' in df_metricas.columns:
+                    # Formato antiguo
+                    df_display = df_metricas.copy()
+                    df_display['MAPE_Test'] = df_display['MAPE_Test'].apply(lambda x: f"{x:.2f}%")
+                    if 'R2_Test' in df_display.columns:
+                        df_display['R2_Test'] = df_display['R2_Test'].apply(lambda x: f"{x:.3f}")
+                        df_display.columns = ['Variable', 'MAPE (%)', 'R² Score', 'Ensemble']
+                    else:
+                        df_display.columns = ['Variable', 'MAPE (%)']
+                else:
+                    df_display = df_metricas
                 
                 st.dataframe(
                     df_display,
@@ -1308,15 +1339,11 @@ def main():
                 
                 st.markdown("""
                 **Interpretación:**
-                - **MAPE**: Error promedio (menor = mejor)
+                - **MAPE**: Error porcentual medio absoluto (menor = mejor)
                   - < 2%: Excelente
                   - 2-5%: Muy bueno
                   - 5-10%: Bueno
                   - > 10%: Necesita mejora
-                - **R²**: Capacidad de ajuste (1.0 = perfecto)
-                  - > 0.9: Excelente
-                  - 0.7-0.9: Bueno
-                  - < 0.7: Regular
                 """)
         
         with col2:
@@ -1325,52 +1352,72 @@ def main():
             if datos['metricas_resumen'] is not None:
                 df_resumen = datos['metricas_resumen'].copy()
                 
-                # Mostrar métricas como cards mejoradas
-                for idx, row in df_resumen.iterrows():
-                    variable = row['Variable']
-                    # Usar nombres correctos de columnas
-                    mape = row['MAPE_Test'] if 'MAPE_Test' in df_resumen.columns else row.get('MAPE', 0)
-                    r2 = row['R2_Test'] if 'R2_Test' in df_resumen.columns else row.get('R²', 0)
+                # Detectar formato del archivo
+                if 'Modelo' in df_resumen.columns and 'MAPE_Promedio' in df_resumen.columns:
+                    # FORMATO NUEVO (Notebook 08 con 3 versiones)
+                    st.info(f"""
+                    **Modelo:** {df_resumen['Modelo'].iloc[0]}  
+                    **MAPE Promedio:** {df_resumen['MAPE_Promedio'].iloc[0]}  
+                    **Variables Evaluadas:** {df_resumen['Variables_Evaluadas'].iloc[0]}  
+                    **Nivel de Ajuste:** {df_resumen['Nivel_Ajuste'].iloc[0]}
+                    """)
                     
-                    # Determinar clase CSS según MAPE
-                    if mape < 2:
-                        clase = "quality-excellent"
-                        emoji = "🌟"
-                        calificacion = "Excelente"
-                    elif mape < 5:
-                        clase = "quality-good"
-                        emoji = "✨"
-                        calificacion = "Muy bueno"
-                    elif mape < 10:
-                        clase = "quality-fair"
-                        emoji = "📊"
-                        calificacion = "Bueno"
-                    else:
-                        clase = "quality-poor"
-                        emoji = "⚠️"
-                        calificacion = "Necesita mejora"
-                    
-                    st.markdown(f"""
-                    <div class='{clase}'>
-                        <h4 style='margin: 0; display: flex; align-items: center; gap: 8px;'>
-                            <span>{emoji}</span>
-                            <span>{variable.replace('_', ' ')}</span>
-                        </h4>
-                        <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;'>
-                            <div>
-                                <p style='margin: 0; font-size: 0.85em; color: #5a6c7d; font-weight: 600;'>MAPE</p>
-                                <p style='margin: 5px 0 0 0; font-size: 1.8em; font-weight: 800;'>{mape:.2f}%</p>
+                elif 'Variable' in df_resumen.columns:
+                    # FORMATO ANTIGUO (Notebook 07)
+                    # Mostrar métricas como cards mejoradas
+                    for idx, row in df_resumen.iterrows():
+                        variable = row['Variable']
+                        # Usar nombres correctos de columnas
+                        mape = row.get('MAPE_Test', row.get('MAPE', 0))
+                        r2 = row.get('R2_Test', row.get('R²', 0))
+                        
+                        # Si mape es string, convertir
+                        if isinstance(mape, str):
+                            mape = float(mape.replace('%', ''))
+                        if isinstance(r2, str):
+                            r2 = float(r2)
+                        
+                        # Determinar clase CSS según MAPE
+                        if mape < 2:
+                            clase = "quality-excellent"
+                            emoji = "🌟"
+                            calificacion = "Excelente"
+                        elif mape < 5:
+                            clase = "quality-good"
+                            emoji = "✨"
+                            calificacion = "Muy bueno"
+                        elif mape < 10:
+                            clase = "quality-fair"
+                            emoji = "📊"
+                            calificacion = "Bueno"
+                        else:
+                            clase = "quality-poor"
+                            emoji = "⚠️"
+                            calificacion = "Necesita mejora"
+                        
+                        st.markdown(f"""
+                        <div class='{clase}'>
+                            <h4 style='margin: 0; display: flex; align-items: center; gap: 8px;'>
+                                <span>{emoji}</span>
+                                <span>{variable.replace('_', ' ')}</span>
+                            </h4>
+                            <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;'>
+                                <div>
+                                    <p style='margin: 0; font-size: 0.85em; color: #5a6c7d; font-weight: 600;'>MAPE</p>
+                                    <p style='margin: 5px 0 0 0; font-size: 1.8em; font-weight: 800;'>{mape:.2f}%</p>
+                                </div>
+                                <div>
+                                    <p style='margin: 0; font-size: 0.85em; color: #5a6c7d; font-weight: 600;'>R² Score</p>
+                                    <p style='margin: 5px 0 0 0; font-size: 1.8em; font-weight: 800;'>{r2:.3f}</p>
+                                </div>
                             </div>
-                            <div>
-                                <p style='margin: 0; font-size: 0.85em; color: #5a6c7d; font-weight: 600;'>R² Score</p>
-                                <p style='margin: 5px 0 0 0; font-size: 1.8em; font-weight: 800;'>{r2:.3f}</p>
-                            </div>
+                            <p style='margin: 12px 0 0 0; font-size: 1em; font-weight: 700; text-align: center;'>
+                                {calificacion}
+                            </p>
                         </div>
-                        <p style='margin: 12px 0 0 0; font-size: 1em; font-weight: 700; text-align: center;'>
-                            {calificacion}
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
+                else:
+                    st.warning("Formato de métricas no reconocido")
         
         # Explicación adicional
         st.markdown("---")
